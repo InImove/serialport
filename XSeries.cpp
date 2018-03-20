@@ -2,10 +2,11 @@
 #include "XSeries.h"
  #include <assert.h>
 #include <WinDef.h>
+HANDLE m_hCom = 0;			    // å·²æ‰“å¼€çš„ä¸²å£å¥æŸ„
 /**************************************************************************************************************************************
 *                                                                                                                                     *
 * Class CFileMemory                                                                                                                   *  
-* ½ø³Ì¼ä¹Ì¶¨´óĞ¡Êı¾İ¿é¹²Ïí                                                                                                            *  
+* è¿›ç¨‹é—´å›ºå®šå¤§å°æ•°æ®å—å…±äº«                                                                                                            *  
 *                                                                                                                                     *  
 *                                                                                                                                     *  
 **************************************************************************************************************************************/
@@ -34,7 +35,7 @@ BOOL CFileMemory::Create(const TCHAR* pszName, int iSize, DWORD dwCreationDispos
 
 	TCHAR szMutexName[100];
 	_stprintf(szMutexName, TEXT("%s.mutex"), pszName);
-	m_hMutex = CreateMutex(NULL, FALSE, szMutexName);   // ´´½¨»¥³âÁ¿
+	m_hMutex = CreateMutex(NULL, FALSE, szMutexName);   // åˆ›å»ºäº’æ–¥é‡
 	if (NULL == m_hMutex)
 	{
 		goto cleanup;
@@ -49,19 +50,19 @@ BOOL CFileMemory::Create(const TCHAR* pszName, int iSize, DWORD dwCreationDispos
 
 	TCHAR szMemName[100];
 	_stprintf(szMemName, TEXT("%s.mem"), pszName);
-	m_hFileMapping = CreateFileMapping((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, m_dwBufferLength, szMemName); // ´´½¨¹²ÏíÄÚ´æ
+	m_hFileMapping = CreateFileMapping((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, m_dwBufferLength, szMemName); // åˆ›å»ºå…±äº«å†…å­˜
 	if (m_hFileMapping == NULL)
 	{
 		goto cleanup;
 	}
 
-	m_pBuffer = (BYTE*)MapViewOfFile(m_hFileMapping, FILE_MAP_WRITE, 0, 0, 0);  // »ñÈ¡Ó³ÉäÊÓÍ¼ÎÄ¼şµÄ¿ªÊ¼µÄµØÖ·
+	m_pBuffer = (BYTE*)MapViewOfFile(m_hFileMapping, FILE_MAP_WRITE, 0, 0, 0);  // è·å–æ˜ å°„è§†å›¾æ–‡ä»¶çš„å¼€å§‹çš„åœ°å€
 	if (NULL == m_pBuffer)
 		goto cleanup;
 
 	if (bFirstCreate)
 	{
-		memset(m_pBuffer, 0, m_dwBufferLength); // ×¢Òâ,Èç¹ûÊÇ¹²ÏíµÄ»°¾Í²»ÄÜÇå¿ÕÁË
+		memset(m_pBuffer, 0, m_dwBufferLength); // æ³¨æ„,å¦‚æœæ˜¯å…±äº«çš„è¯å°±ä¸èƒ½æ¸…ç©ºäº†
 	}
 
 	fResult = TRUE;
@@ -153,8 +154,8 @@ DWORD CFileMemory::Write(BYTE * pBuf, DWORD dwBufLen)
 /**************************************************************************************************************************************
 *                                                                                                                                     *
 * Class CFileMemoryPipe                                                                                                               *  
-* ½ø³Ì¼äÊı¾İ¿é¹²Ïí                                                                                                                    *  
-* ¿ÉÒÔÍ¬Ê±Ò»¶ÁÒ»Ğ´                                                                                                                    *  
+* è¿›ç¨‹é—´æ•°æ®å—å…±äº«                                                                                                                    *  
+* å¯ä»¥åŒæ—¶ä¸€è¯»ä¸€å†™                                                                                                                    *  
 *                                                                                                                                     *  
 **************************************************************************************************************************************/
 CFileMemoryPipe::CFileMemoryPipe()
@@ -208,7 +209,7 @@ void CFileMemoryPipe::Close()
 {
 	if (m_hReadableEvent != NULL)
 	{
-		// Í¨Öª Read() ÀïµÄ WaitForSingleObject(m_hReadableEvent, INFINITE) ÍË³ö
+		// é€šçŸ¥ Read() é‡Œçš„ WaitForSingleObject(m_hReadableEvent, INFINITE) é€€å‡º
 		SetEvent(m_hReadableEvent);
 		CloseHandle(m_hReadableEvent);
 		m_hReadableEvent = NULL;
@@ -216,7 +217,7 @@ void CFileMemoryPipe::Close()
 
 	if (m_hWriteableEvent != NULL)
 	{
-		// Í¨Öª Write() ÀïµÄ WaitForSingleObject(m_hReadableEvent, INFINITE) ÍË³ö
+		// é€šçŸ¥ Write() é‡Œçš„ WaitForSingleObject(m_hReadableEvent, INFINITE) é€€å‡º
 		SetEvent(m_hWriteableEvent);
 		CloseHandle(m_hWriteableEvent);
 		m_hWriteableEvent = NULL;
@@ -246,36 +247,36 @@ DWORD CFileMemoryPipe::Read(BYTE * pBuf, DWORD dwBufLen)
 	}
 
 	// get length from shared memory
-	DWORD  dwLength = ((DWORD*)m_pBuffer)[0];									// ÏÈÈ¡µÃ´æÓĞÊı¾İµÄ³¤¶È
-	DWORD  dwMaxLength = m_dwBufferLength - sizeof(DWORD);						// ×î´óÊı¾İ´æÁ¿
-	bool   fFull = (dwLength >= dwMaxLength);									// Êı¾İÊÇ·ñÂúÁË
+	DWORD  dwLength = ((DWORD*)m_pBuffer)[0];									// å…ˆå–å¾—å­˜æœ‰æ•°æ®çš„é•¿åº¦
+	DWORD  dwMaxLength = m_dwBufferLength - sizeof(DWORD);						// æœ€å¤§æ•°æ®å­˜é‡
+	bool   fFull = (dwLength >= dwMaxLength);									// æ•°æ®æ˜¯å¦æ»¡äº†
 
 	//if (0 == dwLength)
 	//{
-	// ÊÕµ½µÄÍ¨Öª£¬ÊÇÎªÁËÈÃ Read ÍË³öµÈ´ı
+	// æ”¶åˆ°çš„é€šçŸ¥ï¼Œæ˜¯ä¸ºäº†è®© Read é€€å‡ºç­‰å¾…
 	//	DebugBreak();
 	//}
 
 	// copy data
-	if (dwBufLen >= dwLength)													// Èç¹ûÒª¶ÁÈ¡µÄÊı¾İ´óÓÚÏÖÔÚÓĞµÄÊı¾İ
+	if (dwBufLen >= dwLength)													// å¦‚æœè¦è¯»å–çš„æ•°æ®å¤§äºç°åœ¨æœ‰çš„æ•°æ®
 	{
-		iBytesRead = dwLength;													// ¿É¶ÁÊı¾İ³¤¶È			
-		memcpy(pBuf, m_pBuffer + sizeof(DWORD), iBytesRead);					// ¶ÁÈ¡Êı¾İ
-		((DWORD*)m_pBuffer)[0] = 0;												// °ÑÊı¾İ³¤¶ÈÉèÎª0 
-		ResetEvent(m_hReadableEvent);		// no data left for reading			// ÊÍ·Å¶ÁĞÅºÅ 
-		if (fFull)                           // ¶ÁÖ®Ç°ÊÇ full,ÏÖÔÚ¶ÁºóÈ«Îª¿Õ,Í¨Öª¿ÉĞ´
+		iBytesRead = dwLength;													// å¯è¯»æ•°æ®é•¿åº¦			
+		memcpy(pBuf, m_pBuffer + sizeof(DWORD), iBytesRead);					// è¯»å–æ•°æ®
+		((DWORD*)m_pBuffer)[0] = 0;												// æŠŠæ•°æ®é•¿åº¦è®¾ä¸º0 
+		ResetEvent(m_hReadableEvent);		// no data left for reading			// é‡Šæ”¾è¯»ä¿¡å· 
+		if (fFull)                           // è¯»ä¹‹å‰æ˜¯ full,ç°åœ¨è¯»åå…¨ä¸ºç©º,é€šçŸ¥å¯å†™
 		{
 			SetEvent(m_hWriteableEvent);	// now writeable (only set if was full)
 		}
 	}
-	else																		// ·ñÔò¶ÁÈ¡µÄÊı¾İÁ¿Ğ¡ÓÚÏÖÔÚÓĞµÄÊı¾İÁ¿	
+	else																		// å¦åˆ™è¯»å–çš„æ•°æ®é‡å°äºç°åœ¨æœ‰çš„æ•°æ®é‡	
 	{
 		iBytesRead = dwBufLen;
 		memcpy(pBuf, m_pBuffer + sizeof(DWORD), iBytesRead);					
-		dwLength -= iBytesRead;													// ¶ÁÈ¡²»Íê			
-		((DWORD*)m_pBuffer)[0] = dwLength;										// ÖØĞÂ¼ÆËã³¤¶È
+		dwLength -= iBytesRead;													// è¯»å–ä¸å®Œ			
+		((DWORD*)m_pBuffer)[0] = dwLength;										// é‡æ–°è®¡ç®—é•¿åº¦
 		memmove(m_pBuffer + sizeof(DWORD), m_pBuffer + sizeof(DWORD) + iBytesRead, dwLength);
-		if (fFull && dwLength < dwMaxLength)         // ¶ÁÖ®Ç°ÊÇ full,ÏÖÔÚ¶ÁºóÓĞÒ»¶¨¿Õ¼ä,Í¨Öª¿ÉĞ´
+		if (fFull && dwLength < dwMaxLength)         // è¯»ä¹‹å‰æ˜¯ full,ç°åœ¨è¯»åæœ‰ä¸€å®šç©ºé—´,é€šçŸ¥å¯å†™
 		{
 			SetEvent(m_hWriteableEvent);	// now writeable (only set if was full)
 		}
@@ -288,21 +289,21 @@ DWORD CFileMemoryPipe::Read(BYTE * pBuf, DWORD dwBufLen)
 }
 
 /********************************************************************************
-º¯ÊıÃû   : <Close>
-¹¦ÄÜ     : ¹Ø±Õ¹ÜµÀµÄĞ´¶Ë
-²ÎÊı     : [OUT] 
+å‡½æ•°å   : <Close>
+åŠŸèƒ½     : å…³é—­ç®¡é“çš„å†™ç«¯
+å‚æ•°     : [OUT] 
            [IN]  
-·µ»ØÖµ   : 
-Å×³öÒì³£ : 
+è¿”å›å€¼   : 
+æŠ›å‡ºå¼‚å¸¸ : 
 --------------------------------------------------------------------------------
-±¸×¢     : 
-µäĞÍÓÃ·¨ : 
+å¤‡æ³¨     : 
+å…¸å‹ç”¨æ³• : 
 --------------------------------------------------------------------------------
-×÷Õß     : <hrg>  
-´´½¨Ê±¼ä : 2018/03/18 
+ä½œè€…     : <hrg>  
+åˆ›å»ºæ—¶é—´ : 2018/03/18 
 --------------------------------------------------------------------------------
-ĞŞ¸Ä¼ÇÂ¼ : 
-ÈÕ ÆÚ        °æ±¾ ĞŞ¸ÄÈË       ĞŞ¸ÄÄÚÈİ 
+ä¿®æ”¹è®°å½• : 
+æ—¥ æœŸ        ç‰ˆæœ¬ ä¿®æ”¹äºº       ä¿®æ”¹å†…å®¹ 
 
 *******************************************************************************/
 void CFmpWPoint::Close()
@@ -315,7 +316,7 @@ void CFmpWPoint::Close()
 
 	if (m_hWriteableEvent != NULL)
 	{
-		// Í¨Öª Write() ÀïµÄ WaitForSingleObject(m_hWriteableEvent, INFINITE) ÍË³ö
+		// é€šçŸ¥ Write() é‡Œçš„ WaitForSingleObject(m_hWriteableEvent, INFINITE) é€€å‡º
 		SetEvent(m_hWriteableEvent);
 
 		CloseHandle(m_hWriteableEvent);
@@ -327,28 +328,28 @@ void CFmpWPoint::Close()
 
 
 /********************************************************************************
-º¯ÊıÃû   : <Close>
-¹¦ÄÜ     : ¹Ø±Õ¹ÜµÀµÄ¶Á¶Ë
-²ÎÊı     : [OUT] 
+å‡½æ•°å   : <Close>
+åŠŸèƒ½     : å…³é—­ç®¡é“çš„è¯»ç«¯
+å‚æ•°     : [OUT] 
            [IN]  
-·µ»ØÖµ   : 
-Å×³öÒì³£ : 
+è¿”å›å€¼   : 
+æŠ›å‡ºå¼‚å¸¸ : 
 --------------------------------------------------------------------------------
-±¸×¢     : 
-µäĞÍÓÃ·¨ : 
+å¤‡æ³¨     : 
+å…¸å‹ç”¨æ³• : 
 --------------------------------------------------------------------------------
-×÷Õß     : <hrg>  
-´´½¨Ê±¼ä : 2018/03/18 
+ä½œè€…     : <hrg>  
+åˆ›å»ºæ—¶é—´ : 2018/03/18 
 --------------------------------------------------------------------------------
-ĞŞ¸Ä¼ÇÂ¼ : 
-ÈÕ ÆÚ        °æ±¾ ĞŞ¸ÄÈË       ĞŞ¸ÄÄÚÈİ 
+ä¿®æ”¹è®°å½• : 
+æ—¥ æœŸ        ç‰ˆæœ¬ ä¿®æ”¹äºº       ä¿®æ”¹å†…å®¹ 
 
 *******************************************************************************/
 void CFmpRPoint::Close()
 {
 	if (m_hReadableEvent != NULL)
 	{
-		// Í¨Öª Read() ÀïµÄ WaitForSingleObject(m_hReadableEvent, INFINITE) ÍË³ö
+		// é€šçŸ¥ Read() é‡Œçš„ WaitForSingleObject(m_hReadableEvent, INFINITE) é€€å‡º
 		SetEvent(m_hReadableEvent);
 
 		CloseHandle(m_hReadableEvent);
@@ -377,10 +378,10 @@ DWORD CFileMemoryPipe::Write(BYTE * pBuf, DWORD dwBufLen)
 
 	while (dwBufLen > 0)
 	{
-		// µÈ´ıÊÂ¼ş ³ÉÎª¿ÉĞ´
+		// ç­‰å¾…äº‹ä»¶ æˆä¸ºå¯å†™
 		WaitForSingleObject(m_hWriteableEvent, INFINITE);
 
-		// Í¨¹ı»¥³âÁ¿·ÃÎÊ (5Ãëºó³¬Ê±)
+		// é€šè¿‡äº’æ–¥é‡è®¿é—® (5ç§’åè¶…æ—¶)
 		DWORD dwWaitResult = WaitForSingleObject(m_hMutex, 5000);
 		if (dwWaitResult == WAIT_FAILED || dwWaitResult == WAIT_TIMEOUT)
 		{
@@ -390,30 +391,30 @@ DWORD CFileMemoryPipe::Write(BYTE * pBuf, DWORD dwBufLen)
 		DWORD dwOriginalLength = ((DWORD*)m_pBuffer)[0];
 		DWORD dwCurrentLength = dwOriginalLength;
 		DWORD dwMaxLength = m_dwBufferLength - sizeof(DWORD);
-		//if (dwCurrentLength < dwMaxLength)									// »¹ÓĞÎ»ÖÃ¿ÉĞ´
+		//if (dwCurrentLength < dwMaxLength)									// è¿˜æœ‰ä½ç½®å¯å†™
 		if ((dwCurrentLength < dwMaxLength)
-			&& (dwMaxLength - dwCurrentLength >= dwBufLen))						// »¹ÓĞÎ»ÖÃ¿ÉĞ´£¬¶øÇÒ space >= dwBufLen£¬±£Ö¤ÒªÒ»´ÎĞ´Íê
+			&& (dwMaxLength - dwCurrentLength >= dwBufLen))						// è¿˜æœ‰ä½ç½®å¯å†™ï¼Œè€Œä¸” space >= dwBufLenï¼Œä¿è¯è¦ä¸€æ¬¡å†™å®Œ
 		{		
-			DWORD dwLengthToWriteNow = dwBufLen;								// ÒªĞ´ÈëµÄÊı¾İ³¤¶È
-			if (dwCurrentLength + dwBufLen > dwMaxLength)						// Èç¹ûÒªĞ´µÄ³¤¶È³¬³ö·¶Î§µÄ»°
+			DWORD dwLengthToWriteNow = dwBufLen;								// è¦å†™å…¥çš„æ•°æ®é•¿åº¦
+			if (dwCurrentLength + dwBufLen > dwMaxLength)						// å¦‚æœè¦å†™çš„é•¿åº¦è¶…å‡ºèŒƒå›´çš„è¯
 			{
-				dwLengthToWriteNow = dwMaxLength - dwCurrentLength;				// ÒªĞ´ÈëµÄ³¤¶È ÎªÊ£ÏÂµÄ³¤¶È
+				dwLengthToWriteNow = dwMaxLength - dwCurrentLength;				// è¦å†™å…¥çš„é•¿åº¦ ä¸ºå‰©ä¸‹çš„é•¿åº¦
 			}
 
 			// copy data into shared memory
-			memcpy(((unsigned char*)&((DWORD*)m_pBuffer)[1]) + dwCurrentLength, pBuf, dwLengthToWriteNow);			//Ìø¹ıÁ½¸ö×ÖµÄÎ»ÖÃ ²¢ÇÒ¼ÓÉÏµ±Ç°Ğ´ÓĞµÄ³¤¶È 
+			memcpy(((unsigned char*)&((DWORD*)m_pBuffer)[1]) + dwCurrentLength, pBuf, dwLengthToWriteNow);			//è·³è¿‡ä¸¤ä¸ªå­—çš„ä½ç½® å¹¶ä¸”åŠ ä¸Šå½“å‰å†™æœ‰çš„é•¿åº¦ 
 			// write length into shared memory
-			dwCurrentLength += dwLengthToWriteNow;								// ÏÖÔÚÓĞµÄÊı¾İ³¤¶È
-			((DWORD*)m_pBuffer)[0] = dwCurrentLength;							// ±£´æÏÖÔÚÊı¾İ³¤¶È
-			if (dwCurrentLength >= (DWORD)dwMaxLength)							// Èç¹ûÂúÁË£¬¾ÍÊÍ·ÅĞÅºÅ£¬²»ÔÙĞ´Êı¾İÁË
+			dwCurrentLength += dwLengthToWriteNow;								// ç°åœ¨æœ‰çš„æ•°æ®é•¿åº¦
+			((DWORD*)m_pBuffer)[0] = dwCurrentLength;							// ä¿å­˜ç°åœ¨æ•°æ®é•¿åº¦
+			if (dwCurrentLength >= (DWORD)dwMaxLength)							// å¦‚æœæ»¡äº†ï¼Œå°±é‡Šæ”¾ä¿¡å·ï¼Œä¸å†å†™æ•°æ®äº†
 			{
 				ResetEvent(m_hWriteableEvent);			// buffer full, no longer writeable
 			}
 			// keep track of total bytes written during this writePipe() call
-			iBytesWritten += dwLengthToWriteNow;								// ÒÑ¾­Ğ´ÈëµÄ¶àÉÙ¸öÊı¾İ					
+			iBytesWritten += dwLengthToWriteNow;								// å·²ç»å†™å…¥çš„å¤šå°‘ä¸ªæ•°æ®					
 			// adjust data pointer and length for next write
-			pBuf += iBytesWritten;												// Ö¸ÕëÒÆ¶¯
-			dwBufLen -= iBytesWritten;											// ¼õÈ¥ÒÑ¾­Ğ´ÈëÊı¾İµÄ³¤¶È
+			pBuf += iBytesWritten;												// æŒ‡é’ˆç§»åŠ¨
+			dwBufLen -= iBytesWritten;											// å‡å»å·²ç»å†™å…¥æ•°æ®çš„é•¿åº¦
 		}
 		else if (dwMaxLength - dwCurrentLength < dwBufLen)
 		{
@@ -422,7 +423,7 @@ DWORD CFileMemoryPipe::Write(BYTE * pBuf, DWORD dwBufLen)
 		}
 
 		// signal data available for reading
-		if (dwOriginalLength == 0)     // Ğ´Ö®Ç°Îª¿Õ,¶øÏÖÔÚ¾Í¿É¶ÁÁË				//
+		if (dwOriginalLength == 0)     // å†™ä¹‹å‰ä¸ºç©º,è€Œç°åœ¨å°±å¯è¯»äº†				//
 		{	// only signal if there was no data in the buffer
 			SetEvent(m_hReadableEvent);
 		}
@@ -440,6 +441,9 @@ CXSeries::CXSeries(void)
 	m_pProtOwer = NULL;
 	m_hCom = NULL;
 	m_pbyReadBuf = NULL;
+	memset(&m_olWrite, 0, sizeof(m_olWrite));
+	memset(&m_olWaite, 0, sizeof(m_olWaite));
+	memset(&m_olRead, 0, sizeof(m_olRead));
 }
 
 CXSeries::~CXSeries(void)
@@ -447,28 +451,28 @@ CXSeries::~CXSeries(void)
 }
 
 /*
-*º¯Êı½éÉÜ£º´ò¿ª´®¿Ú
-*Èë¿Ú²ÎÊı£ºpPortOwner	:Ê¹ÓÃ´Ë´®¿ÚÀàµÄ´°Ìå¾ä±ú
-		   portNo		:´®¿ÚºÅ
-		   baud			:²¨ÌØÂÊ
-		   parity		:ÆæÅ¼Ğ£Ñé
-		   databits		:Êı¾İÎ»
-		   stopbits		:Í£Ö¹Î»
-*³ö¿Ú²ÎÊı£ºTREU ³É¹¦£¬ FALSE Ê§°Ü
-*·µ»ØÖµ£ºTRUE:³É¹¦´ò¿ª´®¿Ú;FALSE:´ò¿ª´®¿ÚÊ§°Ü
+*å‡½æ•°ä»‹ç»ï¼šæ‰“å¼€ä¸²å£
+*å…¥å£å‚æ•°ï¼špPortOwner	:ä½¿ç”¨æ­¤ä¸²å£ç±»çš„çª—ä½“å¥æŸ„
+		   portNo		:ä¸²å£å·
+		   baud			:æ³¢ç‰¹ç‡
+		   parity		:å¥‡å¶æ ¡éªŒ
+		   databits		:æ•°æ®ä½
+		   stopbits		:åœæ­¢ä½
+*å‡ºå£å‚æ•°ï¼šTREU æˆåŠŸï¼Œ FALSE å¤±è´¥
+*è¿”å›å€¼ï¼šTRUE:æˆåŠŸæ‰“å¼€ä¸²å£;FALSE:æ‰“å¼€ä¸²å£å¤±è´¥
 */
-DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
-						  UINT port,            //´®¿ÚºÅ
-						  UINT baud ,           //²¨ÌØÂÊ
-						  UINT parity,          //ÆæÅ¼Ğ£ÑéÎ»
-						  UINT databits,        //Êı¾İÎ»
-						  UINT stopbits         //Í£Ö¹Î»
+DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //ä¸²å£ç±»çš„æ‹¥æœ‰è€…
+						  UINT port,            //ä¸²å£å·
+						  UINT baud ,           //æ³¢ç‰¹ç‡
+						  UINT parity,          //å¥‡å¶æ ¡éªŒä½
+						  UINT databits,        //æ•°æ®ä½
+						  UINT stopbits         //åœæ­¢ä½
 						  )
 {
 	DCB dcb;
 	TCHAR szProtname[15];
 	DWORD returnval = (DWORD)INVALID_HANDLE_VALUE;
-	if(m_hCom != INVALID_HANDLE_VALUE)
+	if(m_hCom == INVALID_HANDLE_VALUE)
 	{
 		returnval = true;
 		goto errorRet;
@@ -476,15 +480,15 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
 
 	assert(pPortOwer != NULL);
 	assert(port <= 9 && port>=0);
-	//¸ñÊ½»¯ ´®¿ÚÃû
+	//æ ¼å¼åŒ– ä¸²å£å
 	_stprintf(szProtname,L"COM%d",port);
 	
-	//´ò¿ª´®¿Ú
-	m_hCom = CreateFile(szProtname,                            //´®¿ÚÃû
-						GENERIC_READ | GENERIC_WRITE,	   //ÔÊĞí¶ÁĞ´
-						0,                                 //¶ÀÕ¼·½Ê½
+	//æ‰“å¼€ä¸²å£
+	m_hCom = CreateFile(szProtname,                            //ä¸²å£å
+						GENERIC_READ | GENERIC_WRITE,	   //å…è®¸è¯»å†™
+						0,                                 //ç‹¬å æ–¹å¼
 						NULL,
-						OPEN_EXISTING,                     //´ò¿ª¶ø²»ÊÇ´´½¨
+						OPEN_EXISTING,                     //æ‰“å¼€è€Œä¸æ˜¯åˆ›å»º
 						0,
 						NULL
 						);
@@ -492,48 +496,50 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
 	{
 		goto errorRet;
 	}
-	//µÃµ½µ±Ç°´ò¿ª´®¿ÚµÄÊôĞÔ²ÎÊı
+	//å¾—åˆ°å½“å‰æ‰“å¼€ä¸²å£çš„å±æ€§å‚æ•°
 	if(!GetCommState(m_hCom,&dcb))
 	{
 		goto errorRet;
 	}
 
-	//ÖØĞÂÉèÖÃÊôĞÔ£¬ÉèÖÃ³¬Ê±ÌØĞÔÎªÁ¢¼´·µ»Ø
+	//é‡æ–°è®¾ç½®å±æ€§ï¼Œè®¾ç½®è¶…æ—¶ç‰¹æ€§ä¸ºç«‹å³è¿”å›
 	dcb.DCBlength = sizeof(DCB);     
-	dcb.BaudRate = baud;			        //ÉèÖÃ²¨ÌØÂÊ		
-	dcb.fBinary = true;				        //ÉèÖÃ¶ş½øÖÆÄ£Ê½ ±ØĞëÉèÖÃtrue win32 Ö»Ö§³Ö¶ş½øÖÆÄ£Ê½
-	dcb.fParity = true;				        //ÉèÖÃÊÇ·ñÖ§³ÖÆæÅ¼Ğ£ÑéÎ»
-	dcb.ByteSize = databits;                //Êı¾İÎ» ·¶Î§£º4~8
-	dcb.Parity = NOPARITY;			        //Ğ£ÑéÄ£Ê½
-	dcb.StopBits = stopbits;                //Í£Ö¹Î»
+	dcb.BaudRate = baud;			        //è®¾ç½®æ³¢ç‰¹ç‡		
+	dcb.fBinary = TRUE;				        //è®¾ç½®äºŒè¿›åˆ¶æ¨¡å¼ å¿…é¡»è®¾ç½®true win32 åªæ”¯æŒäºŒè¿›åˆ¶æ¨¡å¼
+	dcb.fParity = TRUE;				        //è®¾ç½®æ˜¯å¦æ”¯æŒå¥‡å¶æ ¡éªŒä½
+	dcb.ByteSize = databits;                //æ•°æ®ä½ èŒƒå›´ï¼š4~8
+	dcb.Parity = NOPARITY;			        //æ ¡éªŒæ¨¡å¼
+	dcb.StopBits = stopbits;                //åœæ­¢ä½
 
-	dcb.fOutxCtsFlow = false;               //ÊÇ·ñ¼à¿ØCTS(clear-to-send)ĞÅºÅÀ´×öÊä³öÁ÷¿Ø
-	dcb.fOutxDsrFlow = false;               //ÊÇ·ñ¼à¿ØDSR (data-set-ready) ĞÅºÅÀ´×öÊä³öÁ÷¿Ø
+	dcb.fOutxCtsFlow = false;               //æ˜¯å¦ç›‘æ§CTS(clear-to-send)ä¿¡å·æ¥åšè¾“å‡ºæµæ§
+	dcb.fOutxDsrFlow = false;               //æ˜¯å¦ç›‘æ§DSR (data-set-ready) ä¿¡å·æ¥åšè¾“å‡ºæµæ§
 	dcb.fDtrControl = DTR_CONTROL_ENABLE;
 	//DTR flow control type
-	dcb.fDsrSensitivity = FALSE;			// Í¨Ñ¶Éè±¸ÊÇ·ñ¶ÔDSRĞÅºÅÃô¸Ğ¡£ÈôÉèÖÃÎªTRUE£¬Ôòµ±DSRÎªµÍÊ±½«»áºöÂÔËùÓĞ½ÓÊÕµÄ×Ö½Ú 
-	dcb.fTXContinueOnXoff = TRUE;			// µ±ÊäÈë»º³åÇøÂúÇÒÇı¶¯³ÌĞòÒÑ·¢³öXOFF×Ö·ûÊ±£¬ÊÇ·ñÍ£Ö¹·¢ËÍ¡£ 
-	dcb.fOutX = FALSE;					    // XON/XOFF Á÷Á¿¿ØÖÆÔÚ·¢ËÍÊ±ÊÇ·ñ¿ÉÓÃ¡£Èç¹ûÎªTRUE, µ± XOFF Öµ±»ÊÕµ½µÄÊ±ºò£¬·¢ËÍÍ£Ö¹£»µ± XON Öµ±»ÊÕµ½µÄÊ±ºò£¬·¢ËÍ¼ÌĞø 
-	dcb.fInX = FALSE;						// XON/XOFF Á÷Á¿¿ØÖÆÔÚ½ÓÊÕÊ±ÊÇ·ñ¿ÉÓÃ¡£Èç¹ûÎªTRUE, µ± ÊäÈë»º³åÇøÒÑ½ÓÊÕÂúXoffLim ×Ö½ÚÊ±£¬·¢ËÍXOFF×Ö·û
-	dcb.fErrorChar = FALSE;				    // Ö¸¶¨ErrorChar×Ö·û£¨´úÌæ½ÓÊÕµ½µÄÆæÅ¼Ğ£Ñé·¢Éú´íÎóÊ±µÄ×Ö½Ú£©
-	dcb.fNull = FALSE;					    // ½ÓÊÕÊ±ÊÇ·ñ×Ô¶¯È¥µô0Öµ
+	dcb.fDsrSensitivity = FALSE;			// é€šè®¯è®¾å¤‡æ˜¯å¦å¯¹DSRä¿¡å·æ•æ„Ÿã€‚è‹¥è®¾ç½®ä¸ºTRUEï¼Œåˆ™å½“DSRä¸ºä½æ—¶å°†ä¼šå¿½ç•¥æ‰€æœ‰æ¥æ”¶çš„å­—èŠ‚ 
+	dcb.fTXContinueOnXoff = TRUE;			// å½“è¾“å…¥ç¼“å†²åŒºæ»¡ä¸”é©±åŠ¨ç¨‹åºå·²å‘å‡ºXOFFå­—ç¬¦æ—¶ï¼Œæ˜¯å¦åœæ­¢å‘é€ã€‚ 
+	dcb.fOutX = FALSE;					    // XON/XOFF æµé‡æ§åˆ¶åœ¨å‘é€æ—¶æ˜¯å¦å¯ç”¨ã€‚å¦‚æœä¸ºTRUE, å½“ XOFF å€¼è¢«æ”¶åˆ°çš„æ—¶å€™ï¼Œå‘é€åœæ­¢ï¼›å½“ XON å€¼è¢«æ”¶åˆ°çš„æ—¶å€™ï¼Œå‘é€ç»§ç»­ 
+	dcb.fInX = FALSE;						// XON/XOFF æµé‡æ§åˆ¶åœ¨æ¥æ”¶æ—¶æ˜¯å¦å¯ç”¨ã€‚å¦‚æœä¸ºTRUE, å½“ è¾“å…¥ç¼“å†²åŒºå·²æ¥æ”¶æ»¡XoffLim å­—èŠ‚æ—¶ï¼Œå‘é€XOFFå­—ç¬¦
+	dcb.fErrorChar = FALSE;				    // æŒ‡å®šErrorCharå­—ç¬¦ï¼ˆä»£æ›¿æ¥æ”¶åˆ°çš„å¥‡å¶æ ¡éªŒå‘ç”Ÿé”™è¯¯æ—¶çš„å­—èŠ‚ï¼‰
+	dcb.fNull = FALSE;					    // æ¥æ”¶æ—¶æ˜¯å¦è‡ªåŠ¨å»æ‰0å€¼
 	dcb.fRtsControl = RTS_CONTROL_ENABLE; 
 	// RTS flow control 
-	dcb.fAbortOnError = FALSE;			    // µ±´®¿Ú·¢Éú´íÎó£¬²¢²»ÖÕÖ¹´®¿Ú¶ÁĞ´
+	dcb.fAbortOnError = FALSE;			    // å½“ä¸²å£å‘ç”Ÿé”™è¯¯ï¼Œå¹¶ä¸ç»ˆæ­¢ä¸²å£è¯»å†™
 
 	if(!SetCommState(m_hCom,&dcb))
 	{
+		DWORD dw =GetLastError();
+		int i = 9;
 		goto errorRet;
 	}
 
-	// ÉèÖÃ´®¿Ú¶ÁĞ´Ê±¼ä
+	// è®¾ç½®ä¸²å£è¯»å†™æ—¶é—´
 	COMMTIMEOUTS CommTimeOuts;
 	GetCommTimeouts(m_hCom,&CommTimeOuts);
-	CommTimeOuts.ReadIntervalTimeout = 5;           // ¶Á¼ä¸ô³¬Ê±
-	CommTimeOuts.ReadTotalTimeoutConstant = 0;	    // ¶ÁÊ±¼ä³£Á¿
-	CommTimeOuts.ReadTotalTimeoutMultiplier = 0;    // ¶ÁÊ±¼äÏµÊı
-	CommTimeOuts.WriteTotalTimeoutConstant = 10;	// Ğ´Ê±¼ä³£Á¿
-	CommTimeOuts.WriteTotalTimeoutMultiplier = 100; // Ğ´Ê±¼äÏµÊı
+	CommTimeOuts.ReadIntervalTimeout = 5;           // è¯»é—´éš”è¶…æ—¶
+	CommTimeOuts.ReadTotalTimeoutConstant = 0;	    // è¯»æ—¶é—´å¸¸é‡
+	CommTimeOuts.ReadTotalTimeoutMultiplier = 0;    // è¯»æ—¶é—´ç³»æ•°
+	CommTimeOuts.WriteTotalTimeoutConstant = 10;	// å†™æ—¶é—´å¸¸é‡
+	CommTimeOuts.WriteTotalTimeoutMultiplier = 100; // å†™æ—¶é—´ç³»æ•°
 
 	if(!SetCommTimeouts(m_hCom,&CommTimeOuts))
 	{
@@ -542,7 +548,7 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
 
 	m_pProtOwer = pPortOwer;
 
-	//·ÖÅä¶ÁÏß³Ìbuf
+	//åˆ†é…è¯»çº¿ç¨‹buf
 	if(!m_pbyReadBuf)
 	{
 		//m_pbyReadBuf = new BYTE[READ_THREAD_BUFSIZE];
@@ -553,22 +559,26 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
 		}
 	}
 
-	// ³õÊ¼»¯Ïß³Ì½áÊø±êÖ¾ 
+	// åˆå§‹åŒ–çº¿ç¨‹ç»“æŸæ ‡å¿— 
 	m_fRThreadExit = FALSE;
 	m_fWThreadExit = FALSE;
-	// ´´½¨¶Á´®¿ÚÏß³Ì.
+	m_olWrite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	m_olWaite.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	m_olRead.hEvent  = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+	// åˆ›å»ºè¯»ä¸²å£çº¿ç¨‹.
 	m_hRthread = CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)RThread,this,0,&m_hRthreadID);
-	// ¹¹ÔìÏûÏ¢¶ÓÁĞÃû³Æ,ÒòÎª²»Í¬EXEÊµÁĞ±ØĞëÓĞ×Ô¼ºµÄÏûÏ¢¶ÓÁĞÃû³Æ
+	// æ„é€ æ¶ˆæ¯é˜Ÿåˆ—åç§°,å› ä¸ºä¸åŒEXEå®åˆ—å¿…é¡»æœ‰è‡ªå·±çš„æ¶ˆæ¯é˜Ÿåˆ—åç§°
 	TCHAR szQuquename[64]=L"";
 	_tcscpy(szQuquename,WRITETHERAD_COM_PORT);
 	_tcscat(szQuquename,szProtname);
 	
 	_tcscat(szQuquename,L"W");
-    // ´´½¨¹²ÏíÄÚ´æ¿é
+    // åˆ›å»ºå…±äº«å†…å­˜å—
 	BOOL bfristCreate;
 	if (FALSE == m_objWCpu2McuPipe.Create(szQuquename, READ_THREAD_BUFSIZE, OPEN_EXISTING,bfristCreate))
 	{
-		//MessageBox(NULL, L"»ñÈ¡¹²ÏíÄÚ´æÊ§°Ü(ÔÚCommonSeriesÖĞ)", NULL, MB_OK);
+		//MessageBox(NULL, L"è·å–å…±äº«å†…å­˜å¤±è´¥(åœ¨CommonSeriesä¸­)", NULL, MB_OK);
 		MessageBox(NULL,L"CXSeries::OpenPort: m_objWCpu2McuPipe.Create fail!\r\n",NULL, MB_OK);
 	}
 	_tcscat(szQuquename,L"R");
@@ -576,7 +586,7 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //´®¿ÚÀàµÄÓµÓĞÕß
 	{
 		MessageBox(NULL,L"CXSeries::OpenPort: m_objRCpu2McuPipe.Create fail!\r\n",NULL, MB_OK);
 	}
-	// ´´½¨Ğ´´®¿ÚÏß³Ì.
+	// åˆ›å»ºå†™ä¸²å£çº¿ç¨‹.
 	m_hWthread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WThread, this, 0, &m_hWthreadID);
 	returnval = true;
 errorRet:
@@ -598,7 +608,7 @@ DWORD CXSeries::WThread(LPVOID pParam)
 DWORD CXSeries::RThread(LPVOID pParam)
 {
 	CXSeries *pseries =  (CXSeries*)(pParam);
-	return pseries->RThreadProc();
+	return pseries->RThreadProc( pParam);
 }
 
 DWORD CXSeries::WThreadProc()
@@ -612,33 +622,36 @@ DWORD CXSeries::WThreadProc()
 	return 0;
 }
 
-DWORD CXSeries::RThreadProc()
+DWORD CXSeries::RThreadProc(LPVOID pParam)
 {
+	CXSeries *pseries =  (CXSeries*)(pParam);
 	DWORD dwEvtMask;
 	DWORD dwActualReadLen = 0;
-	DWORD dwWillReadLen = 0;
-	// Çå¿Õ»º³å, ²¢¼ì²é´®¿ÚÊÇ·ñ´ò¿ª.
+	DWORD dwWillReadLen = READ_THREAD_BUFSIZE -1;
+	// æ¸…ç©ºç¼“å†², å¹¶æ£€æŸ¥ä¸²å£æ˜¯å¦æ‰“å¼€.
 	assert(m_hCom !=INVALID_HANDLE_VALUE);
-	// Ö¸¶¨¶Ë¿Ú¼à²âµÄÊÂ¼ş¼¯.
+	// æŒ‡å®šç«¯å£ç›‘æµ‹çš„äº‹ä»¶é›†.
 	SetCommMask(m_hCom, EV_RXCHAR);
 
-	// ·ÖÅäÉè±¸»º³åÇø£¬ Ê¹ÓÃÄ¬ÈÏµÄ¡£³õÊ¼»¯»º³åÇøÖĞµÄĞÅÏ¢.
+	// åˆ†é…è®¾å¤‡ç¼“å†²åŒºï¼Œ ä½¿ç”¨é»˜è®¤çš„ã€‚åˆå§‹åŒ–ç¼“å†²åŒºä¸­çš„ä¿¡æ¯.
 	PurgeComm(m_hCom, PURGE_TXCLEAR | PURGE_RXCLEAR);
 	while(!m_fRThreadExit)
 	{
 		WaitCommEvent(m_hCom, &dwEvtMask, &m_olWaite);
 		if(FALSE == GetOverlappedResult(m_hCom,&m_olWaite,&dwActualReadLen,TRUE))
 		{
-			if (ERROR_IO_PENDING != GetLastError())  //µÈ´ıÖØµş²Ù×÷
+			//GetOverlappedResult
+			
+			if (ERROR_IO_PENDING != GetLastError())  //ç­‰å¾…é‡å æ“ä½œ
 			{
 				MessageBox(NULL, L"ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
 				continue;
 			}
-			//Çå³ı error flag
+			//æ¸…é™¤ error flag
 			DWORD dwErrors;
 			COMSTAT comStat;
 			memset(&comStat, 0, sizeof(comStat));
-			//Çå³ıÓ²¼şµÄÍ¨Ñ¶´íÎó ,»ñÈ¡Éè±¸µÄµ±Ç°×´Ì¬
+			//æ¸…é™¤ç¡¬ä»¶çš„é€šè®¯é”™è¯¯ ,è·å–è®¾å¤‡çš„å½“å‰çŠ¶æ€
 			ClearCommError(m_hCom, &dwErrors, &comStat);
 
 			MessageBox(NULL, L"FALSE == GetOverlappedResult(...)", NULL, MB_OK);
@@ -647,6 +660,7 @@ DWORD CXSeries::RThreadProc()
 
 		if(FALSE ==  ReadFile(m_hCom, m_pbyReadBuf, dwWillReadLen, &dwActualReadLen, &m_olRead))
 		{
+			DWORD fff = GetLastError();
 			if (ERROR_IO_PENDING != GetLastError())
 			{
 				MessageBox(NULL, L"ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
@@ -662,7 +676,7 @@ DWORD CXSeries::RThreadProc()
 
 			if(dwActualReadLen >0 )
 			{
-				// ´¥·¢¶ÁÈ¡»Øµ÷º¯Êı.
+				// è§¦å‘è¯»å–å›è°ƒå‡½æ•°.
 				if (m_pProtOwer)
 				{
 					m_pProtOwer->OnSeriesRead(m_pbyReadBuf, dwActualReadLen, NULL);
@@ -673,19 +687,19 @@ DWORD CXSeries::RThreadProc()
 	}
 	return this->m_fRThreadExit;
 }
-// Ë½ÓÃ·½·¨, ÓÃÓÚÏò´®¿ÚĞ´Êı¾İ, ±»Ğ´Ïß³Ìµ÷ÓÃ.
+// ç§ç”¨æ–¹æ³•, ç”¨äºå‘ä¸²å£å†™æ•°æ®, è¢«å†™çº¿ç¨‹è°ƒç”¨.
 BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 {
 	DWORD dwNumBytesWritten;
-	DWORD dwHaveNumWritten = 0;          // ÒÑ¾­Ğ´Èë¶àÉÙ.
+	DWORD dwHaveNumWritten = 0;          // å·²ç»å†™å…¥å¤šå°‘.
 	assert(hComm != INVALID_HANDLE_VALUE);
 	do
 	{
 		DWORD dwActualWrite;  
-		if (FALSE == WriteFile(hComm,    // ´®¿Ú¾ä±ú.
-			pbyBuf + dwHaveNumWritten,   // ±»Ğ´Êı¾İ»º³åÇø.
-			dwBufLen - dwHaveNumWritten, // ±»Ğ´Êı¾İ»º³åÇø´óĞ¡.
-			&dwNumBytesWritten,          // º¯ÊıÖ´ĞĞ³É¹¦ºó, ·µ»ØÊµ¼ÊÏò´®¿ÚĞ´µÄ¸öÊı.
+		if (FALSE == WriteFile(hComm,    // ä¸²å£å¥æŸ„.
+			pbyBuf + dwHaveNumWritten,   // è¢«å†™æ•°æ®ç¼“å†²åŒº.
+			dwBufLen - dwHaveNumWritten, // è¢«å†™æ•°æ®ç¼“å†²åŒºå¤§å°.
+			&dwNumBytesWritten,          // å‡½æ•°æ‰§è¡ŒæˆåŠŸå, è¿”å›å®é™…å‘ä¸²å£å†™çš„ä¸ªæ•°.
 			&m_olWrite))
 		{
 			if (ERROR_IO_PENDING != GetLastError())
@@ -697,7 +711,7 @@ BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 		if (TRUE == GetOverlappedResult(hComm, &m_olWrite, &dwNumBytesWritten, TRUE))
 		{
 			dwHaveNumWritten = dwHaveNumWritten + dwNumBytesWritten;
-			// Ğ´ÈëÍê³É.
+			// å†™å…¥å®Œæˆ.
 			if(dwHaveNumWritten == dwBufLen)
 			{
 				break;
@@ -705,7 +719,7 @@ BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 		}
 		else
 		{
-			MessageBox(NULL, L"Ğ´´®¿ÚÊ§°Ü", NULL, MB_OK);
+			MessageBox(NULL, L"å†™ä¸²å£å¤±è´¥", NULL, MB_OK);
 			return FALSE;
 		}
 	} while(TRUE);
