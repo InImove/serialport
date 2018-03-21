@@ -1,4 +1,4 @@
-#include "StdAfx.h"
+#include "stdafx.h"
 #include "XSeries.h"
  #include <assert.h>
 #include <WinDef.h>
@@ -238,7 +238,7 @@ DWORD CFileMemoryPipe::Read(BYTE * pBuf, DWORD dwBufLen)
 	// wait for pipe to become readable
 	// NOTE: what if the caller already did this, such as the "select" loop in cerunner???
 	//       this is a waste and unnecessary penalty then
-	WaitForSingleObject(m_hReadableEvent, INFINITE);
+	//WaitForSingleObject(m_hReadableEvent, INFINITE);
 	// serialise access through mutex (timeout after 5 seconds)
 	DWORD dwWaitResult = WaitForSingleObject(m_hMutex, 5000);
 	if (dwWaitResult == WAIT_FAILED || dwWaitResult == WAIT_TIMEOUT)
@@ -371,7 +371,7 @@ DWORD CFileMemoryPipe::Write(BYTE * pBuf, DWORD dwBufLen)
 {
 	DWORD	iBytesWritten = 0;
 
-	if ((m_pBuffer == NULL) || (pBuf == NULL))
+	if(pBuf == NULL)
 	{
 		return iBytesWritten;
 	}
@@ -385,6 +385,7 @@ DWORD CFileMemoryPipe::Write(BYTE * pBuf, DWORD dwBufLen)
 		DWORD dwWaitResult = WaitForSingleObject(m_hMutex, 5000);
 		if (dwWaitResult == WAIT_FAILED || dwWaitResult == WAIT_TIMEOUT)
 		{
+			ReleaseMutex(m_hMutex);
 			return 0;
 		}
 
@@ -476,6 +477,13 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //串口类的拥有者
 	{
 		returnval = true;
 		goto errorRet;
+	}else if(m_hCom == NULL)
+	{
+		
+	}else
+	{
+		
+		goto errorRet;
 	}
 
 	assert(pPortOwer != NULL);
@@ -489,9 +497,11 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //串口类的拥有者
 						0,                                 //独占方式
 						NULL,
 						OPEN_EXISTING,                     //打开而不是创建
-						0,
+						FILE_FLAG_OVERLAPPED,
 						NULL
 						);
+
+
 	if(m_hCom == INVALID_HANDLE_VALUE)
 	{
 		goto errorRet;
@@ -539,7 +549,7 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //串口类的拥有者
 	CommTimeOuts.ReadTotalTimeoutConstant = 0;	    // 读时间常量
 	CommTimeOuts.ReadTotalTimeoutMultiplier = 0;    // 读时间系数
 	CommTimeOuts.WriteTotalTimeoutConstant = 10;	// 写时间常量
-	CommTimeOuts.WriteTotalTimeoutMultiplier = 100; // 写时间系数
+	CommTimeOuts.WriteTotalTimeoutMultiplier = 20; // 写时间系数
 
 	if(!SetCommTimeouts(m_hCom,&CommTimeOuts))
 	{
@@ -592,7 +602,8 @@ DWORD CXSeries::OPenSeries(IPortOwer* pPortOwer, //串口类的拥有者
 errorRet:
 	if((DWORD)INVALID_HANDLE_VALUE == returnval)
 	{
-		ClosePort();
+		//ClosePort();
+		MessageBox(NULL,L"The serial port has been opened !\r\n",NULL, MB_OK);
 		returnval = false;
 	}
 	return returnval;
@@ -616,10 +627,12 @@ DWORD CXSeries::WThreadProc()
 	BYTE bRBuf[2048] = {0};
 	while (!this->m_fWThreadExit)
 	{
-		DWORD dwlen = m_objRCpu2McuPipe.Read(bRBuf,2048);
-		return this->WritePort(m_hCom,bRBuf,dwlen);
+		DWORD dwlen = m_objWCpu2McuPipe.Read(bRBuf,2048);
+		if(dwlen>0)
+	    this->WritePort(m_hCom,bRBuf,dwlen);
+		Sleep(10);
 	}
-	return 0;
+	return this->m_fWThreadExit;
 }
 
 DWORD CXSeries::RThreadProc(LPVOID pParam)
@@ -644,7 +657,7 @@ DWORD CXSeries::RThreadProc(LPVOID pParam)
 			
 			if (ERROR_IO_PENDING != GetLastError())  //等待重叠操作
 			{
-				MessageBox(NULL, L"ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
+				MessageBox(NULL, L"11111111111ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
 				continue;
 			}
 			//清除 error flag
@@ -663,13 +676,23 @@ DWORD CXSeries::RThreadProc(LPVOID pParam)
 			DWORD fff = GetLastError();
 			if (ERROR_IO_PENDING != GetLastError())
 			{
-				MessageBox(NULL, L"ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
+				MessageBox(NULL, L"222222222222ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
 				continue;
 			}
 			if (FALSE == GetOverlappedResult(m_hCom, &m_olRead, &dwActualReadLen, TRUE))
 			{
 				MessageBox(NULL, L"FALSE == GetOverlappedResult(...)", NULL, MB_OK);
 				continue;
+			}else
+			{
+				if(dwActualReadLen >0 )
+				{
+					// 触发读取回调函数.
+					if (m_pProtOwer)
+					{
+						m_pProtOwer->OnSeriesRead(m_pbyReadBuf, dwActualReadLen, NULL);
+					}
+				}
 			}
 		}else
 		{
@@ -687,11 +710,39 @@ DWORD CXSeries::RThreadProc(LPVOID pParam)
 	}
 	return this->m_fRThreadExit;
 }
+
+/*
+*函数介绍：向串口发送数据
+*入口参数：pbyBuf		: 将要往串口写入的数据的缓冲区
+		   dwBufLen	: 将要往串口写入的数据的缓冲区长度
+*出口参数：(无)
+*返回值：TRUE:表示成功地将要发送的数据传递到写线程消息队列。
+		 FALSE:表示将要发送的数据传递到写线程消息队列失败。
+		 注视：此处的TRUE,不直接代表数据一定成功写入到串口了。
+*/
+BOOL CXSeries::OwerWritePort(const BYTE * pbyBuf, DWORD dwBufLen)
+{
+	DWORD dwActual;
+	BOOL bRet = TRUE;
+	if(m_hCom != INVALID_HANDLE_VALUE)
+	{
+		dwActual = m_objWCpu2McuPipe.Write((BYTE *)pbyBuf, dwBufLen);
+		assert(dwActual == dwBufLen);
+	}else
+	{
+		BOOL bRet = FALSE;
+	}
+	
+	return bRet;
+    
+}
+
 // 私用方法, 用于向串口写数据, 被写线程调用.
 BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 {
 	DWORD dwNumBytesWritten;
 	DWORD dwHaveNumWritten = 0;          // 已经写入多少.
+	BYTE pby = pbyBuf[9];
 	assert(hComm != INVALID_HANDLE_VALUE);
 	do
 	{
@@ -704,7 +755,7 @@ BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 		{
 			if (ERROR_IO_PENDING != GetLastError())
 			{
-				MessageBox(NULL, L"ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
+				MessageBox(NULL, L"33333333333333333ERROR_IO_PENDING != GetLastError()", NULL, MB_OK);
 				return FALSE;
 			}
 		}
@@ -727,7 +778,119 @@ BOOL CXSeries::WritePort(HANDLE hComm, const BYTE *pbyBuf, DWORD dwBufLen)
 	return TRUE;
 }
 
+// 关闭读线程.
+void CXSeries::CloseRThread()
+{
+	if (m_hCom != INVALID_HANDLE_VALUE) 
+	{
+		// 设置所有事件无效.
+		SetCommMask(m_hCom, 0);
+
+		// 清空所有将要读的数据.
+		PurgeComm(m_hCom, PURGE_RXCLEAR);
+	}
+
+	if(m_hRthread) 
+	{
+		m_fRThreadExit = TRUE;
+
+		// 等待3秒, 6次,每次500ms 如果读线程没有退出, 则强制退出.
+		int i = 0;
+		while (i < 6)
+		{
+			//SetEvent(m_hComm);      // 这个不能
+			SetEvent(m_hRthread);  // 这个能让读线程收到事件
+
+			if (WaitForSingleObject(m_hRthread, 50) == WAIT_TIMEOUT)
+			{
+				i++;
+			}
+			else
+			{
+				break;
+			}
+		}
+		if (i == 10)
+		{
+
+			TerminateThread(m_hRthread, 0);        
+		}
+
+		CloseHandle(m_hRthread);
+		m_hRthread = NULL;
+	}
+}
+
+// 关闭写线程.
+void CXSeries::CloseWThread()
+{
+	if(m_hCom != INVALID_HANDLE_VALUE) 
+	{
+		// 清空所有将要写的数据.
+		PurgeComm(m_hCom, PURGE_TXCLEAR);
+	}
+
+	// 等待3秒，如果读线程没有退出，则强制退出.
+	if(m_hWthread) 
+	{
+		m_fWThreadExit = TRUE;
+
+		SetEvent(m_hWthread);
+
+		// 关闭读端和写端
+		m_objRCpu2McuPipe.Close();
+		m_objWCpu2McuPipe.Close();
+
+		if(WaitForSingleObject(m_hWthread, 3000) == WAIT_TIMEOUT)
+		{
+
+			TerminateThread(m_hWthread, 0);
+		}
+
+		CloseHandle(m_hWthread);
+		m_hWthread = NULL;
+	}
+}
+
 void CXSeries::ClosePort()
 {
+	// 关闭读线程.
+	CloseRThread();
 
+	// 关闭写线程.
+	CloseWThread();
+
+	// 关闭串口.
+	if(m_hCom != INVALID_HANDLE_VALUE)
+	{
+		CloseHandle(m_hCom);
+		m_hCom = INVALID_HANDLE_VALUE;
+	}
+
+	if (m_pbyReadBuf)
+	{
+		delete []m_pbyReadBuf;
+		m_pbyReadBuf = NULL;
+	}
+
+	if (m_olWrite.hEvent)
+	{
+		CloseHandle(m_olWrite.hEvent);
+		m_olWrite.hEvent = NULL;
+	}
+
+	if (m_olWaite.hEvent)
+	{
+		CloseHandle(m_olWaite.hEvent);
+		m_olWaite.hEvent = NULL;
+	}
+
+	if (m_olRead.hEvent)
+	{
+		CloseHandle(m_olRead.hEvent);
+		m_olRead.hEvent = NULL;
+	}
+
+
+	return;
 }
