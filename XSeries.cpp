@@ -801,7 +801,7 @@ void CXSeries::CloseRThread()
 			//SetEvent(m_hComm);      // 这个不能
 			SetEvent(m_hRthread);  // 这个能让读线程收到事件
 
-			if (WaitForSingleObject(m_hRthread, 50) == WAIT_TIMEOUT)
+			if (WaitForSingleObject(m_hRthread, 500) == WAIT_TIMEOUT)
 			{
 				i++;
 			}
