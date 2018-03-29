@@ -192,4 +192,5 @@ private:
 	OVERLAPPED  m_olWrite;      // 异步输入输出信息的结构体
 	OVERLAPPED	m_olWaite;
 	OVERLAPPED	m_olRead;
+	HANDLE m_hCom;			    // 已打开的串口句柄
 };
